@@ -14,7 +14,8 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import (
-    TimeoutException, ElementClickInterceptedException
+    TimeoutException, ElementClickInterceptedException,
+    StaleElementReferenceException
 )
 from webdriver_manager.chrome import ChromeDriverManager
 
@@ -369,6 +370,204 @@ def click_earliest_appointment_link(driver, timeout=5):
             continue
 
     logger.warning("Link 'cita más temprana' not found")
+    return False
+
+
+def get_combobox_state(driver, input_id, select_id):
+    """Read current state of a combobox pair (visible input + hidden select)."""
+    return driver.execute_script("""
+        var selectEl = document.getElementById(arguments[0]);
+        var inputEl = document.getElementById(arguments[1]);
+        var result = {};
+
+        if (selectEl) {
+            result.select_value = selectEl.value;
+            var idx = selectEl.selectedIndex;
+            result.select_text = (idx >= 0 && selectEl.options[idx])
+                ? selectEl.options[idx].text : '';
+            result.option_count = selectEl.options.length;
+        }
+
+        if (inputEl) {
+            result.input_value = inputEl.value;
+        }
+
+        return result;
+    """, select_id, input_id)
+
+
+def verify_combobox_selection(driver, input_id, select_id, expected_text):
+    """Verify combobox selection matches expected text in both layers."""
+    state = get_combobox_state(driver, input_id, select_id)
+    if not state:
+        logger.warning(f"Could not read combobox state for #{input_id}/#{select_id}")
+        return False
+
+    select_value = state.get("select_value", "-1")
+    select_text = state.get("select_text", "")
+    input_value = state.get("input_value", "")
+
+    logger.info(
+        f"Combobox #{input_id}: input='{input_value}', "
+        f"select='{select_text}' (value={select_value})"
+    )
+
+    if select_value in ("-1", "", None):
+        logger.warning(f"Hidden select #{select_id} still at default value")
+        return False
+
+    expected_lower = expected_text.lower()
+    if (
+        expected_lower in (select_text or "").lower()
+        or expected_lower in (input_value or "").lower()
+    ):
+        return True
+
+    logger.warning(
+        f"Expected '{expected_text}' not found in combobox state. "
+        f"input='{input_value}', select='{select_text}'"
+    )
+    return False
+
+
+def _try_combobox_ui_interaction(driver, combo_input, partial_text, timeout):
+    """Type into combobox input and click matching autocomplete menu item."""
+    try:
+        combo_input.click()
+        time.sleep(0.3)
+
+        driver.execute_script("arguments[0].value = '';", combo_input)
+        time.sleep(0.2)
+
+        combo_input.send_keys(partial_text)
+        time.sleep(1)
+
+        menu_timeout = min(5, timeout)
+        menu_selectors = [
+            "ul.ui-autocomplete li.ui-menu-item",
+            ".ui-autocomplete .ui-menu-item",
+        ]
+
+        for selector in menu_selectors:
+            try:
+                items = WebDriverWait(driver, menu_timeout).until(
+                    EC.visibility_of_any_elements_located(
+                        (By.CSS_SELECTOR, selector)
+                    )
+                )
+                for item in items:
+                    item_text = item.text.strip()
+                    if partial_text.lower() in item_text.lower():
+                        clickable = item.find_elements(
+                            By.CSS_SELECTOR, "a, div.ui-menu-item-wrapper"
+                        )
+                        (clickable[0] if clickable else item).click()
+                        logger.info(f"Selected from autocomplete: {item_text}")
+                        time.sleep(1)
+                        return True
+            except TimeoutException:
+                continue
+
+    except Exception as e:
+        logger.debug(f"Combobox UI interaction failed: {e}")
+
+    return False
+
+
+def _select_combobox_js_fallback(driver, input_id, select_id, partial_text):
+    """Set combobox value via JS, updating both hidden select and visible input."""
+    try:
+        result = driver.execute_script("""
+            var selectEl = document.getElementById(arguments[0]);
+            var inputEl = document.getElementById(arguments[1]);
+            var searchText = arguments[2].toLowerCase();
+
+            if (!selectEl) return {error: 'select not found: ' + arguments[0]};
+            if (!inputEl) return {error: 'input not found: ' + arguments[1]};
+
+            var targetOption = null;
+            for (var i = 0; i < selectEl.options.length; i++) {
+                if (selectEl.options[i].text.toLowerCase().indexOf(searchText) !== -1) {
+                    targetOption = selectEl.options[i];
+                    break;
+                }
+            }
+
+            if (!targetOption) return {error: 'option not found for: ' + arguments[2]};
+
+            selectEl.value = targetOption.value;
+            inputEl.value = targetOption.text;
+
+            ['change', 'input', 'blur'].forEach(function(t) {
+                selectEl.dispatchEvent(new Event(t, {bubbles: true}));
+            });
+
+            if (typeof jQuery !== 'undefined') {
+                jQuery(selectEl).val(targetOption.value).trigger('change');
+                jQuery(inputEl).val(targetOption.text);
+            }
+
+            return {value: targetOption.value, text: targetOption.text};
+        """, select_id, input_id, partial_text)
+
+        if isinstance(result, dict) and "error" not in result:
+            logger.info(f"Selected (JS fallback): {result.get('text', '?')}")
+            return True
+        logger.warning(f"JS fallback issue: {result}")
+    except Exception as e:
+        logger.warning(f"JS fallback exception: {e}")
+    return False
+
+
+def select_combobox_option(driver, input_id, select_id, partial_text, timeout=10):
+    """Select option in a jQuery UI combobox via user-like interaction.
+
+    Tries UI interaction first (type in autocomplete input + pick from menu),
+    then falls back to JS-based selection if UI path fails.
+    Verifies result by checking both visible input and hidden select.
+    """
+    try:
+        combo_input = WebDriverWait(driver, timeout).until(
+            EC.element_to_be_clickable((By.ID, input_id))
+        )
+    except TimeoutException:
+        logger.warning(f"Combobox input #{input_id} not found or not clickable")
+        return False
+
+    if _try_combobox_ui_interaction(driver, combo_input, partial_text, timeout):
+        if verify_combobox_selection(driver, input_id, select_id, partial_text):
+            return True
+        logger.warning("UI interaction ran but verification failed; trying JS fallback")
+
+    logger.info(f"Trying JS fallback for #{input_id}")
+    if _select_combobox_js_fallback(driver, input_id, select_id, partial_text):
+        time.sleep(1)
+        if verify_combobox_selection(driver, input_id, select_id, partial_text):
+            return True
+
+    logger.warning(f"All selection methods failed for #{input_id}")
+    return False
+
+
+def wait_for_procedure_options(driver, select_id, expected_text, timeout=10):
+    """Wait until procedure select contains the expected option after category change."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            select_el = driver.find_element(By.ID, select_id)
+            options = Select(select_el).options
+            for opt in options:
+                if expected_text.lower() in _get_option_text(opt).lower():
+                    logger.info(
+                        f"Procedure option '{expected_text}' found "
+                        f"({len(options)} options loaded)"
+                    )
+                    return True
+        except (StaleElementReferenceException, Exception):
+            pass
+        time.sleep(0.5)
+
+    logger.warning(f"Timed out waiting for '{expected_text}' in #{select_id}")
     return False
 
 

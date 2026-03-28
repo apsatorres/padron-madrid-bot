@@ -1,17 +1,22 @@
 """Appointment checking logic."""
 
 import time
-from selenium.webdriver.support.ui import Select
 
 from .config import (
     logger, APPOINTMENTS_URL, CATEGORY_SEARCH, PROCEDURE_SEARCH
 )
 from .browser import (
-    create_driver, save_screenshot, select_option_by_text,
-    find_selects, log_select_options,
+    create_driver, save_screenshot,
     click_unidentified_access, click_earliest_appointment_link,
-    get_page_text
+    get_page_text, select_combobox_option,
+    verify_combobox_selection, wait_for_procedure_options,
+    get_combobox_state
 )
+
+CATEGORY_INPUT_ID = "cpTramite_combo0"
+CATEGORY_SELECT_ID = "selectCategorias"
+PROCEDURE_INPUT_ID = "cpTramite_combo1"
+PROCEDURE_SELECT_ID = "selectTramites"
 
 # Availability indicators (Spanish - must match website text)
 NO_APPOINTMENTS_INDICATORS = [
@@ -63,43 +68,51 @@ def _analyze_availability(page_text):
 
 def _navigate_form(driver):
     """
-    Navigate the form by selecting category and procedure.
+    Navigate the form by selecting category and procedure via combobox inputs.
+    Uses explicit element IDs and verifies each step before proceeding.
     Returns True if successful.
     """
-    all_selects = find_selects(driver)
-
-    if not all_selects:
-        log_select_options(driver)
+    # Step 1: Select category
+    logger.info(f"Selecting category: '{CATEGORY_SEARCH}'")
+    if not select_combobox_option(
+        driver, CATEGORY_INPUT_ID, CATEGORY_SELECT_ID, CATEGORY_SEARCH
+    ):
+        logger.warning(f"Failed to select category '{CATEGORY_SEARCH}'")
+        save_screenshot(driver, "_category_fail")
         return False
 
-    # Select category (first select)
-    category_select = Select(all_selects[0])
-    if not select_option_by_text(category_select, CATEGORY_SEARCH, driver):
-        logger.warning(f"Category '{CATEGORY_SEARCH}' not found")
+    # Step 2: Wait for procedure options to repopulate after category change
+    logger.info("Waiting for procedure options to load...")
+    if not wait_for_procedure_options(
+        driver, PROCEDURE_SELECT_ID, PROCEDURE_SEARCH, timeout=10
+    ):
+        logger.warning("Procedure options did not load after category selection")
+        save_screenshot(driver, "_procedure_wait_fail")
         return False
 
-    time.sleep(2)
-
-    # Find selects again (they may have changed)
-    all_selects = find_selects(driver)
-    if len(all_selects) < 2:
-        logger.warning("Procedure selector not found")
+    # Step 3: Select procedure
+    logger.info(f"Selecting procedure: '{PROCEDURE_SEARCH}'")
+    if not select_combobox_option(
+        driver, PROCEDURE_INPUT_ID, PROCEDURE_SELECT_ID, PROCEDURE_SEARCH
+    ):
+        logger.warning(f"Failed to select procedure '{PROCEDURE_SEARCH}'")
+        save_screenshot(driver, "_procedure_fail")
         return False
 
-    # Select procedure (second select)
-    procedure_select = Select(all_selects[1])
-    if not select_option_by_text(procedure_select, PROCEDURE_SEARCH, driver):
-        logger.warning(f"Procedure '{PROCEDURE_SEARCH}' not found")
-        return False
+    # Log final state before attempting link click
+    cat_state = get_combobox_state(driver, CATEGORY_INPUT_ID, CATEGORY_SELECT_ID)
+    proc_state = get_combobox_state(driver, PROCEDURE_INPUT_ID, PROCEDURE_SELECT_ID)
+    logger.info(
+        f"Pre-link state: category={cat_state}, procedure={proc_state}"
+    )
 
-    time.sleep(2)
-
-    # Click on "consultar la oficina con cita más temprana"
+    # Step 4: Click earliest appointment link
     if click_earliest_appointment_link(driver):
         time.sleep(3)
         return True
 
     logger.warning("Could not click on 'cita más temprana' link")
+    save_screenshot(driver, "_link_fail")
     return False
 
 
