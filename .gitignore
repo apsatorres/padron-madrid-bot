@@ -1,0 +1,18 @@
+# Environment
+.env
+.venv/
+venv/
+
+# Logs
+*.log
+
+# Screenshots
+screenshots/
+
+# IDE
+.idea/
+*.pyc
+__pycache__/
+
+# Mac
+.DS_Store
