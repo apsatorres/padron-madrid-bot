@@ -1,83 +1,83 @@
 #!/usr/bin/env python3
-"""Punto de entrada del bot de citas."""
+"""Entry point for the appointment checker bot."""
 
 import sys
 import html
+import time
 from datetime import datetime
 
 import schedule
 
-from .config import logger, URL_CITAS, CHECK_INTERVAL_MINUTES
-from .checker import verificar_citas
-from .notifier import enviar_notificacion
+from .config import logger, APPOINTMENTS_URL, CHECK_INTERVAL_MINUTES
+from .checker import check_appointments
+from .notifier import send_notification
 
 
-def _formatear_mensaje_cita(hay_citas, mensaje):
-    """Formatea el mensaje para Telegram."""
+def _format_appointment_message(has_appointments, message):
+    """Format the message for Telegram."""
     timestamp = datetime.now().strftime("%d/%m/%Y %H:%M")
-    mensaje_seguro = html.escape(mensaje or "")
+    safe_message = html.escape(message or "")
 
-    if hay_citas is True:
+    if has_appointments is True:
         return f"""
 <b>CITA DISPONIBLE!</b>
 
-{mensaje_seguro}
+{safe_message}
 
 <b>Reserva ahora:</b>
-{URL_CITAS}
+{APPOINTMENTS_URL}
 
 <i>Verificado: {timestamp}</i>
 """
-    elif hay_citas is None:
+    elif has_appointments is None:
         return f"""
 <b>Verificacion de citas - Revisar</b>
 
-{mensaje_seguro}
+{safe_message}
 
 <i>Verificado: {timestamp}</i>
 """
     return None
 
 
-def ejecutar_verificacion():
-    """Ejecuta la verificacion y notifica si corresponde."""
+def run_check():
+    """Run the check and notify if appropriate."""
     logger.info("=" * 50)
-    logger.info(f"Ejecutando verificacion: {datetime.now()}")
+    logger.info(f"Running check: {datetime.now()}")
 
-    hay_citas, mensaje, screenshot = verificar_citas()
+    has_appointments, message, screenshot = check_appointments()
 
-    # Solo notificar si hay citas o hay error
-    texto = _formatear_mensaje_cita(hay_citas, mensaje)
-    if texto:
-        enviar_notificacion(texto, screenshot)
+    # Only notify if appointments found or error
+    text = _format_appointment_message(has_appointments, message)
+    if text:
+        send_notification(text, screenshot)
     else:
-        logger.info(f"Sin citas: {mensaje}")
+        logger.info(f"No appointments: {message}")
 
 
 def run_once():
-    """Ejecuta una sola verificacion."""
-    ejecutar_verificacion()
+    """Run a single check."""
+    run_check()
 
 
 def run_scheduled():
-    """Ejecuta verificaciones programadas."""
-    logger.info(f"Iniciando bot. Verificando cada {CHECK_INTERVAL_MINUTES} minutos.")
+    """Run scheduled checks."""
+    logger.info(f"Starting bot. Checking every {CHECK_INTERVAL_MINUTES} minutes.")
 
-    # Ejecutar inmediatamente
-    ejecutar_verificacion()
+    # Run immediately
+    run_check()
 
-    # Programar ejecuciones
-    schedule.every(CHECK_INTERVAL_MINUTES).minutes.do(ejecutar_verificacion)
+    # Schedule runs
+    schedule.every(CHECK_INTERVAL_MINUTES).minutes.do(run_check)
 
-    # Loop principal
-    import time
+    # Main loop
     while True:
         schedule.run_pending()
         time.sleep(60)
 
 
 def main():
-    """Funcion principal."""
+    """Main function."""
     if len(sys.argv) > 1 and sys.argv[1] == "--once":
         run_once()
     else:

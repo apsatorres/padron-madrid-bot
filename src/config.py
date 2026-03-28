@@ -1,4 +1,4 @@
-"""Configuracion del bot de citas."""
+"""Configuration for the appointment checker bot."""
 
 import os
 import logging
@@ -7,20 +7,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # URLs
-URL_CITAS = "https://servpub.madrid.es/GNSIS_WBCIUDADANO/tramite.do"
+APPOINTMENTS_URL = "https://servpub.madrid.es/GNSIS_WBCIUDADANO/tramite.do"
 
-# Busqueda
-CATEGORIA_BUSCAR = "Padrón"
-TRAMITE_BUSCAR = "Altas"
+# Search terms (Spanish - must match website)
+CATEGORY_SEARCH = "Padrón"
+PROCEDURE_SEARCH = "Altas"
 
 # Telegram
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-# Intervalos
+# Intervals
 CHECK_INTERVAL_MINUTES = int(os.getenv("CHECK_INTERVAL_MINUTES", 30))
 
-# Directorios
+# Directories
 SCREENSHOTS_DIR = "screenshots"
 
 # Logging

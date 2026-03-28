@@ -1,20 +1,20 @@
-"""Logica de verificacion de citas."""
+"""Appointment checking logic."""
 
 import time
 from selenium.webdriver.support.ui import Select
 
 from .config import (
-    logger, URL_CITAS, CATEGORIA_BUSCAR, TRAMITE_BUSCAR
+    logger, APPOINTMENTS_URL, CATEGORY_SEARCH, PROCEDURE_SEARCH
 )
 from .browser import (
-    crear_driver, guardar_screenshot, seleccionar_opcion_por_texto,
-    encontrar_selects, log_opciones_select, click_boton_buscar,
-    click_acceso_sin_identificar, click_consultar_cita_temprana,
-    obtener_texto_pagina
+    create_driver, save_screenshot, select_option_by_text,
+    find_selects, log_select_options,
+    click_unidentified_access, click_earliest_appointment_link,
+    get_page_text
 )
 
-# Indicadores de disponibilidad
-NO_CITAS_INDICADORES = [
+# Availability indicators (Spanish - must match website text)
+NO_APPOINTMENTS_INDICATORS = [
     "no hay citas disponibles",
     "no existen citas",
     "sin disponibilidad",
@@ -24,9 +24,10 @@ NO_CITAS_INDICADORES = [
     "actualmente no hay",
     "no se pueden solicitar citas",
     "no hay turnos disponibles",
-    "no se ha encontrado hueco disponible"]
+    "no se ha encontrado hueco disponible"
+]
 
-SI_CITAS_INDICADORES = [
+YES_APPOINTMENTS_INDICATORS = [
     "citas disponibles",
     "seleccione una fecha",
     "horarios disponibles",
@@ -35,7 +36,7 @@ SI_CITAS_INDICADORES = [
     "fechas disponibles"
 ]
 
-ERRORES_CONEXION_INDICADORES = [
+CONNECTION_ERROR_INDICATORS = [
     "err_connection_closed",
     "this site can't be reached",
     "this site cant be reached",
@@ -44,127 +45,129 @@ ERRORES_CONEXION_INDICADORES = [
 ]
 
 
-def _analizar_disponibilidad(page_text):
+def _analyze_availability(page_text):
     """
-    Analiza el texto de la pagina para detectar disponibilidad.
-    Retorna: (hay_citas: bool|None, indicador: str)
+    Analyze page text to detect availability.
+    Returns: (has_appointments: bool|None, indicator: str)
     """
-    for indicador in NO_CITAS_INDICADORES:
-        if indicador in page_text:
-            return False, indicador
+    for indicator in NO_APPOINTMENTS_INDICATORS:
+        if indicator in page_text:
+            return False, indicator
 
-    for indicador in SI_CITAS_INDICADORES:
-        if indicador in page_text:
-            return True, indicador
+    for indicator in YES_APPOINTMENTS_INDICATORS:
+        if indicator in page_text:
+            return True, indicator
 
-    return None, "no se encontraron indicadores claros"
+    return None, "no clear indicators found"
 
 
-def _navegar_formulario(driver):
+def _navigate_form(driver):
     """
-    Navega el formulario seleccionando categoria y tramite.
-    Retorna True si tuvo exito.
+    Navigate the form by selecting category and procedure.
+    Returns True if successful.
     """
-    all_selects = encontrar_selects(driver)
+    all_selects = find_selects(driver)
 
     if not all_selects:
-        log_opciones_select(driver)
+        log_select_options(driver)
         return False
 
-    # Seleccionar categoria (primer select)
-    categoria_select = Select(all_selects[0])
-    if not seleccionar_opcion_por_texto(categoria_select, CATEGORIA_BUSCAR):
-        logger.warning(f"No se encontro categoria con '{CATEGORIA_BUSCAR}'")
+    # Select category (first select)
+    category_select = Select(all_selects[0])
+    if not select_option_by_text(category_select, CATEGORY_SEARCH, driver):
+        logger.warning(f"Category '{CATEGORY_SEARCH}' not found")
         return False
 
     time.sleep(2)
 
-    # Buscar de nuevo los selects (pueden haber cambiado)
-    all_selects = encontrar_selects(driver)
+    # Find selects again (they may have changed)
+    all_selects = find_selects(driver)
     if len(all_selects) < 2:
-        logger.warning("No se encontro selector de tramite")
+        logger.warning("Procedure selector not found")
         return False
 
-    # Seleccionar tramite (segundo select)
-    tramite_select = Select(all_selects[1])
-    if not seleccionar_opcion_por_texto(tramite_select, TRAMITE_BUSCAR):
-        logger.warning(f"No se encontro tramite con '{TRAMITE_BUSCAR}'")
+    # Select procedure (second select)
+    procedure_select = Select(all_selects[1])
+    if not select_option_by_text(procedure_select, PROCEDURE_SEARCH, driver):
+        logger.warning(f"Procedure '{PROCEDURE_SEARCH}' not found")
         return False
 
     time.sleep(2)
 
-    # Hacer click en buscar
-    click_boton_buscar(driver)
-    time.sleep(3)
+    # Click on "consultar la oficina con cita más temprana"
+    if click_earliest_appointment_link(driver):
+        time.sleep(3)
+        return True
 
-    return True
+    logger.warning("Could not click on 'cita más temprana' link")
+    return False
 
 
-def verificar_citas():
+def check_appointments():
     """
-    Verifica la disponibilidad de citas.
+    Check appointment availability.
 
-    Retorna:
-        tuple: (hay_citas: bool|None, mensaje: str, screenshot_path: str|None)
-            - hay_citas: True si hay, False si no, None si incierto
-            - mensaje: Descripcion del resultado
-            - screenshot_path: Path al screenshot capturado
+    Returns:
+        tuple: (has_appointments: bool|None, message: str, screenshot_path: str|None)
+            - has_appointments: True if available, False if not, None if uncertain
+            - message: Result description
+            - screenshot_path: Path to captured screenshot
     """
     screenshot_path = None
 
     try:
-        logger.info("Iniciando verificacion de citas...")
+        logger.info("Starting appointment check...")
 
-        with crear_driver() as driver:
-            # Navegar a la pagina y superar la portada inicial
-            acceso_ok = False
-            for intento in range(1, 4):
-                logger.info(f"Navegando a {URL_CITAS} (intento {intento}/3)")
-                driver.get(URL_CITAS)
+        with create_driver() as driver:
+            # Navigate to page and pass initial landing
+            access_ok = False
+            for attempt in range(1, 4):
+                logger.info(f"Navigating to {APPOINTMENTS_URL} (attempt {attempt}/3)")
+                driver.get(APPOINTMENTS_URL)
                 time.sleep(3)
 
-                click_acceso_sin_identificar(driver)
+                click_unidentified_access(driver)
                 time.sleep(2)
 
-                page_text = obtener_texto_pagina(driver)
-                if any(err in page_text for err in ERRORES_CONEXION_INDICADORES):
-                    logger.warning("Error de conexion detectado tras el acceso inicial.")
+                page_text = get_page_text(driver)
+                if any(err in page_text for err in CONNECTION_ERROR_INDICATORS):
+                    logger.warning("Connection error detected after initial access.")
                     continue
 
-                acceso_ok = True
+                access_ok = True
                 break
 
-            if not acceso_ok:
-                mensaje = (
-                    "No se pudo cargar correctamente la web tras 3 intentos. "
-                    "Revisar conexion o bloqueo temporal del sitio."
+            if not access_ok:
+                message = (
+                    "Could not load website correctly after 3 attempts. "
+                    "Check connection or temporary site block."
                 )
-                logger.warning(mensaje)
-                return None, mensaje, screenshot_path
+                logger.warning(message)
+                return None, message, screenshot_path
 
-            # Screenshot inicial
-            screenshot_path = guardar_screenshot(driver)
+            # Initial screenshot
+            screenshot_path = save_screenshot(driver)
 
-            # Navegar el formulario
-            if _navegar_formulario(driver):
-                guardar_screenshot(driver, "_resultado")
+            # Navigate the form
+            if _navigate_form(driver):
+                save_screenshot(driver, "_result")
 
-            # Analizar resultado
-            page_text = obtener_texto_pagina(driver)
-            hay_citas, indicador = _analizar_disponibilidad(page_text)
+            # Analyze result
+            page_text = get_page_text(driver)
+            has_appointments, indicator = _analyze_availability(page_text)
 
-            if hay_citas is True:
-                mensaje = f"HAY CITAS DISPONIBLES! Detectado: '{indicador}'"
-                logger.info(mensaje)
-            elif hay_citas is False:
-                mensaje = f"No hay citas disponibles. Detectado: '{indicador}'"
-                logger.info(mensaje)
+            if has_appointments is True:
+                message = f"APPOINTMENTS AVAILABLE! Detected: '{indicator}'"
+                logger.info(message)
+            elif has_appointments is False:
+                message = f"No appointments available. Detected: '{indicator}'"
+                logger.info(message)
             else:
-                mensaje = f"Estado incierto. Revisar manualmente: {URL_CITAS}"
-                logger.warning(mensaje)
+                message = f"Uncertain status. Check manually: {APPOINTMENTS_URL}"
+                logger.warning(message)
 
-            return hay_citas, mensaje, screenshot_path
+            return has_appointments, message, screenshot_path
 
     except Exception as e:
-        logger.error(f"Error verificando citas: {e}")
+        logger.error(f"Error checking appointments: {e}")
         return None, f"Error: {str(e)}", screenshot_path

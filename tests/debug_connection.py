@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
 """
-Debug: Prueba la conexion a la pagina de Madrid.
-Ejecutar: python tests/debug_connection.py
+Debug: Test connection to the Madrid page.
+Run: python tests/debug_connection.py
 """
 
-from src.config import URL_CITAS
-from src.browser import crear_driver, guardar_screenshot
+from src.config import APPOINTMENTS_URL
+from src.browser import create_driver, save_screenshot
 
-print(f"Conectando a: {URL_CITAS}")
+print(f"Connecting to: {APPOINTMENTS_URL}")
 print("-" * 50)
 
 try:
-    with crear_driver() as driver:
-        driver.get(URL_CITAS)
+    with create_driver() as driver:
+        driver.get(APPOINTMENTS_URL)
 
-        print(f"Titulo: {driver.title}")
-        print(f"URL actual: {driver.current_url}")
+        print(f"Title: {driver.title}")
+        print(f"Current URL: {driver.current_url}")
 
-        screenshot = guardar_screenshot(driver, "_debug_connection")
+        screenshot = save_screenshot(driver, "_debug_connection")
         print(f"Screenshot: {screenshot}")
 
-        print("\nConexion exitosa!")
+        print("\nConnection successful!")
 
 except Exception as e:
     print(f"\nERROR: {e}")

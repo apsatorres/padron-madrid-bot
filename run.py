@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Script de entrada para ejecutar el bot."""
+"""Entry script to run the bot."""
 
 from src.main import main
 

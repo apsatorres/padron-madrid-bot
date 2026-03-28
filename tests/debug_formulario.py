@@ -1,85 +1,129 @@
 #!/usr/bin/env python3
 """
-Debug: Explora el formulario de la pagina de Madrid.
-Muestra todos los selectores y sus opciones.
-Ejecutar: python tests/debug_formulario.py
+Debug: Explore the Madrid page form.
+Shows all selectors and their options.
+Run: python tests/debug_formulario.py
 """
 
+import os
+import sys
 import time
+
+# Run from project root
+os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.getcwd())
+
 from selenium.webdriver.support.ui import Select
 
-from src.config import URL_CITAS, CATEGORIA_BUSCAR, TRAMITE_BUSCAR
+from src.config import APPOINTMENTS_URL, CATEGORY_SEARCH, PROCEDURE_SEARCH
 from src.browser import (
-    crear_driver, guardar_screenshot, encontrar_selects,
-    seleccionar_opcion_por_texto, click_acceso_sin_identificar
+    create_driver, save_screenshot, find_selects,
+    select_option_by_text, click_unidentified_access,
+    click_earliest_appointment_link
 )
 
-print(f"Navegando a: {URL_CITAS}")
+print(f"Navigating to: {APPOINTMENTS_URL}")
 print("=" * 60)
 
 try:
-    with crear_driver() as driver:
-        driver.get(URL_CITAS)
+    with create_driver() as driver:
+        driver.get(APPOINTMENTS_URL)
         time.sleep(3)
-        click_acceso_sin_identificar(driver)
+        click_unidentified_access(driver)
         time.sleep(2)
 
-        # Mostrar todos los selects
-        selects = encontrar_selects(driver)
-        print(f"\nEncontrados {len(selects)} selectores:\n")
+        # Show all selects
+        selects = find_selects(driver)
+        print(f"\nFound {len(selects)} selectors:\n")
 
         for i, sel in enumerate(selects):
             try:
                 select_obj = Select(sel)
-                opciones = [
+                options = [
                     (opt.text or opt.get_attribute("label") or "").strip()
                     for opt in select_obj.options
                 ]
                 print(f"SELECT {i}:")
-                for j, opt in enumerate(opciones):
+                for j, opt in enumerate(options):
                     print(f"  [{j}] {opt}")
                 print()
             except Exception as e:
                 print(f"SELECT {i}: Error - {e}\n")
 
-        guardar_screenshot(driver, "_debug_form_inicial")
+        save_screenshot(driver, "_debug_form_initial")
 
-        # Intentar seleccionar categoria
+        # Debug: show select element details
         print("-" * 60)
-        print(f"Intentando seleccionar categoria: '{CATEGORIA_BUSCAR}'")
+        print("SELECT ELEMENT DETAILS:")
+        for i, sel in enumerate(selects):
+            sel_id = sel.get_attribute("id")
+            sel_name = sel.get_attribute("name")
+            print(f"  Select {i}: id='{sel_id}' name='{sel_name}'")
+
+        # Debug: show what's around the first select
+        print("\nHTML around selectCategorias:")
+        html = driver.execute_script(
+            "return document.getElementById('selectCategorias').parentElement.innerHTML.substring(0, 500);"
+        )
+        print(html)
+
+        # Debug: show Select2 containers
+        select2_containers = driver.find_elements(
+            "css selector", "span.select2-selection"
+        )
+        print(f"\nFound {len(select2_containers)} Select2 containers")
+
+        # Check for other common widget patterns
+        for pattern in ["span.select2", "div.select2", "span[class*='select']"]:
+            found = driver.find_elements("css selector", pattern)
+            print(f"Found {len(found)} elements matching '{pattern}'")
+
+        # Try to select category
+        print("-" * 60)
+        print(f"Trying to select category: '{CATEGORY_SEARCH}'")
 
         if selects:
-            select_categoria = Select(selects[0])
-            if seleccionar_opcion_por_texto(select_categoria, CATEGORIA_BUSCAR):
-                print("OK - Categoria seleccionada")
+            category_select = Select(selects[0])
+            if select_option_by_text(category_select, CATEGORY_SEARCH, driver):
+                print("OK - Category selected")
                 time.sleep(2)
 
-                # Ver si aparecieron nuevas opciones
-                selects = encontrar_selects(driver)
-                print(f"\nDespues de seleccionar categoria: {len(selects)} selectores")
+                # Check if new options appeared
+                selects = find_selects(driver)
+                print(f"\nAfter selecting category: {len(selects)} selectors")
 
                 if len(selects) > 1:
-                    select_tramite = Select(selects[1])
-                    opciones_tramite = [
+                    procedure_select = Select(selects[1])
+                    procedure_options = [
                         (opt.text or opt.get_attribute("label") or "").strip()
-                        for opt in select_tramite.options
+                        for opt in procedure_select.options
                     ]
-                    print(f"\nOpciones de tramite:")
-                    for j, opt in enumerate(opciones_tramite):
+                    print(f"\nProcedure options:")
+                    for j, opt in enumerate(procedure_options):
                         print(f"  [{j}] {opt}")
 
-                    # Intentar seleccionar tramite
-                    print(f"\nIntentando seleccionar tramite: '{TRAMITE_BUSCAR}'")
-                    if seleccionar_opcion_por_texto(select_tramite, TRAMITE_BUSCAR):
-                        print("OK - Tramite seleccionado")
+                    # Try to select procedure
+                    print(f"\nTrying to select procedure: '{PROCEDURE_SEARCH}'")
+                    if select_option_by_text(procedure_select, PROCEDURE_SEARCH, driver):
+                        print("OK - Procedure selected")
                         time.sleep(2)
-                        guardar_screenshot(driver, "_debug_form_seleccionado")
-            else:
-                print(f"ERROR - No se encontro '{CATEGORIA_BUSCAR}'")
+                        save_screenshot(driver, "_debug_form_selected")
 
-        # Mostrar texto de la pagina
+                        # Try to click "cita más temprana" link
+                        print("\n" + "-" * 60)
+                        print("Trying to click 'cita más temprana' link...")
+                        if click_earliest_appointment_link(driver):
+                            print("OK - Link clicked")
+                            time.sleep(3)
+                            save_screenshot(driver, "_debug_form_result")
+                        else:
+                            print("ERROR - Link not found")
+            else:
+                print(f"ERROR - Category '{CATEGORY_SEARCH}' not found")
+
+        # Show page text
         print("\n" + "=" * 60)
-        print("TEXTO DE LA PAGINA (primeros 1000 chars):")
+        print("PAGE TEXT (first 1000 chars):")
         print("-" * 60)
         body_text = driver.find_element("tag name", "body").text
         print(body_text[:1000])

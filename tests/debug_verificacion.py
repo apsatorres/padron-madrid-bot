@@ -1,37 +1,41 @@
 #!/usr/bin/env python3
 """
-Debug: Ejecuta el flujo completo de verificacion.
-Ejecutar: python tests/debug_verificacion.py
+Debug: Run the full verification flow.
+Run: python tests/debug_verificacion.py
 """
 
-from src.checker import verificar_citas, NO_CITAS_INDICADORES, SI_CITAS_INDICADORES
+from src.checker import (
+    check_appointments,
+    NO_APPOINTMENTS_INDICATORS,
+    YES_APPOINTMENTS_INDICATORS
+)
 
-print("Ejecutando verificacion completa...")
+print("Running full verification...")
 print("=" * 60)
 
-hay_citas, mensaje, screenshot = verificar_citas()
+has_appointments, message, screenshot = check_appointments()
 
 print("\n" + "=" * 60)
-print("RESULTADO:")
+print("RESULT:")
 print("-" * 60)
 
-if hay_citas is True:
-    print("HAY CITAS DISPONIBLES!")
-elif hay_citas is False:
-    print("No hay citas disponibles")
+if has_appointments is True:
+    print("APPOINTMENTS AVAILABLE!")
+elif has_appointments is False:
+    print("No appointments available")
 else:
-    print("Estado incierto - revisar manualmente")
+    print("Uncertain status - check manually")
 
-print(f"\nMensaje: {mensaje}")
+print(f"\nMessage: {message}")
 print(f"Screenshot: {screenshot}")
 
 print("\n" + "=" * 60)
-print("INDICADORES CONFIGURADOS:")
+print("CONFIGURED INDICATORS:")
 print("-" * 60)
-print("NO hay citas si aparece:")
-for ind in NO_CITAS_INDICADORES:
+print("NO appointments if found:")
+for ind in NO_APPOINTMENTS_INDICATORS:
     print(f"  - {ind}")
 
-print("\nSI hay citas si aparece:")
-for ind in SI_CITAS_INDICADORES:
+print("\nYES appointments if found:")
+for ind in YES_APPOINTMENTS_INDICATORS:
     print(f"  - {ind}")
