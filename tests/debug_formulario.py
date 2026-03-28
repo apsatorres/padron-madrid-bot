@@ -11,7 +11,7 @@ from selenium.webdriver.support.ui import Select
 from src.config import URL_CITAS, CATEGORIA_BUSCAR, TRAMITE_BUSCAR
 from src.browser import (
     crear_driver, guardar_screenshot, encontrar_selects,
-    seleccionar_opcion_por_texto
+    seleccionar_opcion_por_texto, click_acceso_sin_identificar
 )
 
 print(f"Navegando a: {URL_CITAS}")
@@ -21,6 +21,8 @@ try:
     with crear_driver() as driver:
         driver.get(URL_CITAS)
         time.sleep(3)
+        click_acceso_sin_identificar(driver)
+        time.sleep(2)
 
         # Mostrar todos los selects
         selects = encontrar_selects(driver)
@@ -29,7 +31,10 @@ try:
         for i, sel in enumerate(selects):
             try:
                 select_obj = Select(sel)
-                opciones = [opt.text for opt in select_obj.options]
+                opciones = [
+                    (opt.text or opt.get_attribute("label") or "").strip()
+                    for opt in select_obj.options
+                ]
                 print(f"SELECT {i}:")
                 for j, opt in enumerate(opciones):
                     print(f"  [{j}] {opt}")
@@ -55,7 +60,10 @@ try:
 
                 if len(selects) > 1:
                     select_tramite = Select(selects[1])
-                    opciones_tramite = [opt.text for opt in select_tramite.options]
+                    opciones_tramite = [
+                        (opt.text or opt.get_attribute("label") or "").strip()
+                        for opt in select_tramite.options
+                    ]
                     print(f"\nOpciones de tramite:")
                     for j, opt in enumerate(opciones_tramite):
                         print(f"  [{j}] {opt}")

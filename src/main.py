@@ -2,6 +2,7 @@
 """Punto de entrada del bot de citas."""
 
 import sys
+import html
 from datetime import datetime
 
 import schedule
@@ -14,12 +15,13 @@ from .notifier import enviar_notificacion
 def _formatear_mensaje_cita(hay_citas, mensaje):
     """Formatea el mensaje para Telegram."""
     timestamp = datetime.now().strftime("%d/%m/%Y %H:%M")
+    mensaje_seguro = html.escape(mensaje or "")
 
     if hay_citas is True:
         return f"""
 <b>CITA DISPONIBLE!</b>
 
-{mensaje}
+{mensaje_seguro}
 
 <b>Reserva ahora:</b>
 {URL_CITAS}
@@ -30,7 +32,7 @@ def _formatear_mensaje_cita(hay_citas, mensaje):
         return f"""
 <b>Verificacion de citas - Revisar</b>
 
-{mensaje}
+{mensaje_seguro}
 
 <i>Verificado: {timestamp}</i>
 """

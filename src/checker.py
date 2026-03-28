@@ -9,6 +9,7 @@ from .config import (
 from .browser import (
     crear_driver, guardar_screenshot, seleccionar_opcion_por_texto,
     encontrar_selects, log_opciones_select, click_boton_buscar,
+    click_acceso_sin_identificar, click_consultar_cita_temprana,
     obtener_texto_pagina
 )
 
@@ -22,8 +23,8 @@ NO_CITAS_INDICADORES = [
     "no hay huecos",
     "actualmente no hay",
     "no se pueden solicitar citas",
-    "no hay turnos disponibles"
-]
+    "no hay turnos disponibles",
+    "no se ha encontrado hueco disponible"]
 
 SI_CITAS_INDICADORES = [
     "citas disponibles",
@@ -32,6 +33,14 @@ SI_CITAS_INDICADORES = [
     "elegir cita",
     "reservar cita",
     "fechas disponibles"
+]
+
+ERRORES_CONEXION_INDICADORES = [
+    "err_connection_closed",
+    "this site can't be reached",
+    "this site cant be reached",
+    "se ha cerrado la conexion",
+    "se ha cerrado la conexión",
 ]
 
 
@@ -107,10 +116,31 @@ def verificar_citas():
         logger.info("Iniciando verificacion de citas...")
 
         with crear_driver() as driver:
-            # Navegar a la pagina
-            logger.info(f"Navegando a {URL_CITAS}")
-            driver.get(URL_CITAS)
-            time.sleep(3)
+            # Navegar a la pagina y superar la portada inicial
+            acceso_ok = False
+            for intento in range(1, 4):
+                logger.info(f"Navegando a {URL_CITAS} (intento {intento}/3)")
+                driver.get(URL_CITAS)
+                time.sleep(3)
+
+                click_acceso_sin_identificar(driver)
+                time.sleep(2)
+
+                page_text = obtener_texto_pagina(driver)
+                if any(err in page_text for err in ERRORES_CONEXION_INDICADORES):
+                    logger.warning("Error de conexion detectado tras el acceso inicial.")
+                    continue
+
+                acceso_ok = True
+                break
+
+            if not acceso_ok:
+                mensaje = (
+                    "No se pudo cargar correctamente la web tras 3 intentos. "
+                    "Revisar conexion o bloqueo temporal del sitio."
+                )
+                logger.warning(mensaje)
+                return None, mensaje, screenshot_path
 
             # Screenshot inicial
             screenshot_path = guardar_screenshot(driver)
