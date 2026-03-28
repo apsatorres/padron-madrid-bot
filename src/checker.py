@@ -212,6 +212,7 @@ def check_appointments():
                 date = result.get("date", "?")
                 appt_time = result.get("time", "?")
                 message = (
+                    f"{CATEGORY_SEARCH} / {PROCEDURE_SEARCH}\n"
                     f"Cita mas cercana en {office}, "
                     f"{date} a las {appt_time}"
                 )

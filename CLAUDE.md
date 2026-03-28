@@ -13,13 +13,16 @@ Bot that monitors the Madrid City Council website for "padrón" (census registra
 pip install -r requirements.txt
 
 # Single execution (for testing or cron)
-python cita_checker.py --once
+python run.py --once
 
 # Continuous execution (runs every CHECK_INTERVAL_MINUTES)
-python cita_checker.py
+python run.py
 
-# Test Telegram connection
-python test_telegram.py
+# Debug scripts
+python tests/debug_connection.py      # Test page connection
+python tests/debug_formulario.py      # Explore form structure
+python tests/debug_verificacion.py    # Full verification with logs
+python tests/test_telegram.py         # Test Telegram sending
 ```
 
 ## Configuration
@@ -31,31 +34,43 @@ Copy `.env.example` to `.env` and configure:
 
 ## Architecture
 
-Two implementations exist:
+Modular structure in `src/`:
+- `config.py` - Environment variables, logging, constants
+- `browser.py` - Selenium Chrome automation, jQuery UI combobox handling
+- `checker.py` - Appointment checking logic and form navigation
+- `notifier.py` - Async Telegram notifications
+- `main.py` - Entry point and scheduling
 
-1. **`cita_checker.py`** - Monolithic script with all logic (currently in use)
-2. **`src/`** - Refactored modular version:
-   - `config.py` - Environment variables and logging setup
-   - `browser.py` - Selenium Chrome automation (headless), screenshot handling
-   - `notifier.py` - Async Telegram message/photo sending
+## How it works
 
-The bot:
-1. Opens the appointment page via headless Chrome
-2. Selects "Padrón" category and "Altas" procedure in dropdowns
-3. Analyzes page text for availability indicators
-4. Sends Telegram notification only when appointments are found or errors occur
+1. Opens https://servpub.madrid.es/GNSIS_WBCIUDADANO/tramite.do
+2. Clicks "Acceso SIN Identificar"
+3. Selects category "Padrón y censo" via jQuery UI combobox
+4. Waits for procedure options to load
+5. Selects procedure "Altas, bajas y cambio de domicilio en Padrón"
+6. Clicks "consultar la oficina con cita más temprana" link
+7. Analyzes page text for availability indicators
+8. Sends Telegram notification only when appointments found or errors occur
 
-## Key Patterns
+## Key Technical Details
 
-- Screenshots saved to `screenshots/` for debugging when detection fails
-- Logs written to `cita_checker.log`
-- The Madrid website structure may change; check screenshots when scraping breaks
+- The Madrid website uses **jQuery UI comboboxes** (autocomplete widgets), not native HTML selects
+- Each combobox has a visible text input and a hidden `<select>`
+- Element IDs:
+  - Category input: `cpTramite_combo0`, select: `selectCategorias`
+  - Procedure input: `cpTramite_combo1`, select: `selectTramites`
+- The procedure dropdown options update via AJAX when category changes
 - Uses `webdriver-manager` to auto-manage ChromeDriver versions
 
-## macOS Scheduling
+## Deployment
 
-`com.citapadron.checker.plist` provides launchd configuration. Install with:
-```bash
-cp com.citapadron.checker.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.citapadron.checker.plist
-```
+Primary deployment is via **GitHub Actions** (`.github/workflows/check-citas.yml`):
+- Runs every 30 minutes from 7am to 10pm (Madrid time)
+- Requires secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+- Uploads screenshots as artifacts on failure
+
+## Troubleshooting
+
+- Screenshots saved to `screenshots/` for debugging
+- Logs written to `cita_checker.log`
+- If scraping breaks, run `python tests/debug_formulario.py` to see current page structure

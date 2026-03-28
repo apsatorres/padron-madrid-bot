@@ -1,31 +1,44 @@
-# name: Verificar Citas Padron Madrid
+name: Verificar Citas Padron Madrid
 
-# on:
-#   schedule:
-#     # Cada 30 minutos de 7am a 10pm (hora Madrid, UTC+2)
-#     - cron: '*/30 5-20 * * *'
-#   workflow_dispatch:  # Permite ejecutar manualmente
+on:
+  schedule:
+    # Cada 30 minutos de 7am a 10pm (hora Madrid = UTC+1/+2)
+    # UTC 5-20 = Madrid 6-21 (invierno) o 7-22 (verano)
+    - cron: '*/30 5-20 * * *'
+  workflow_dispatch:  # Permite ejecutar manualmente desde GitHub
 
-# jobs:
-#   check:
-#     runs-on: ubuntu-latest
+jobs:
+  check:
+    runs-on: ubuntu-latest
 
-#     steps:
-#       - uses: actions/checkout@v4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-#       - name: Setup Python
-#         uses: actions/setup-python@v5
-#         with:
-#           python-version: '3.11'
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-#       - name: Install Chrome
-#         uses: browser-actions/setup-chrome@v1
+      - name: Setup Chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
 
-#       - name: Install dependencies
-#         run: pip install -r requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
-#       - name: Run checker
-#         env:
-#           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-#           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-#         run: python run.py --once
+      - name: Run checker
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          CI: true
+        run: python run.py --once
+
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screenshots/
+          retention-days: 7
