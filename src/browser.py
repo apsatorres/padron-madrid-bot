@@ -21,6 +21,8 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 from .config import logger, SCREENSHOTS_DIR
 
+_cached_chromedriver_path = None
+
 
 def _get_option_text(option):
     """Get useful text from an <option> element."""
@@ -34,10 +36,13 @@ def _get_option_text(option):
 def _get_chrome_options():
     """Configure Chrome options."""
     options = Options()
+    options.page_load_strategy = "eager"
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-default-apps")
     options.add_argument("--window-size=1920,1080")
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument(
@@ -56,21 +61,25 @@ def _get_chrome_options():
 
 
 def _get_chromedriver_path():
-    """Get the correct chromedriver path."""
-    # In CI, use system chromedriver
+    """Get the correct chromedriver path. Cached after first resolution."""
+    global _cached_chromedriver_path
+    if _cached_chromedriver_path:
+        return _cached_chromedriver_path
+
     if os.getenv("CI"):
         import shutil
         path = shutil.which("chromedriver")
         if path:
+            _cached_chromedriver_path = path
             return path
 
-    # Locally, use webdriver-manager
     driver_path = ChromeDriverManager().install()
     if driver_path.endswith("THIRD_PARTY_NOTICES.chromedriver"):
         driver_path = driver_path.replace(
             "THIRD_PARTY_NOTICES.chromedriver", "chromedriver"
         )
     os.chmod(driver_path, os.stat(driver_path).st_mode | stat.S_IEXEC)
+    _cached_chromedriver_path = driver_path
     return driver_path
 
 
@@ -81,7 +90,7 @@ def create_driver():
     try:
         service = Service(executable_path=_get_chromedriver_path())
         driver = webdriver.Chrome(service=service, options=_get_chrome_options())
-        driver.implicitly_wait(10)
+        driver.implicitly_wait(3)
         yield driver
     finally:
         if driver:
@@ -434,13 +443,11 @@ def _try_combobox_ui_interaction(driver, combo_input, partial_text, timeout):
     """Type into combobox input and click matching autocomplete menu item."""
     try:
         combo_input.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         driver.execute_script("arguments[0].value = '';", combo_input)
-        time.sleep(0.2)
-
         combo_input.send_keys(partial_text)
-        time.sleep(1)
+        time.sleep(0.3)
 
         menu_timeout = min(5, timeout)
         menu_selectors = [
@@ -463,7 +470,7 @@ def _try_combobox_ui_interaction(driver, combo_input, partial_text, timeout):
                         )
                         (clickable[0] if clickable else item).click()
                         logger.info(f"Selected from autocomplete: {item_text}")
-                        time.sleep(1)
+                        time.sleep(0.3)
                         return True
             except TimeoutException:
                 continue
@@ -541,7 +548,7 @@ def select_combobox_option(driver, input_id, select_id, partial_text, timeout=10
 
     logger.info(f"Trying JS fallback for #{input_id}")
     if _select_combobox_js_fallback(driver, input_id, select_id, partial_text):
-        time.sleep(1)
+        time.sleep(0.3)
         if verify_combobox_selection(driver, input_id, select_id, partial_text):
             return True
 

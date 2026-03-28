@@ -1,6 +1,9 @@
 """Appointment checking logic."""
 
-import time
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 
 from .config import (
     logger, APPOINTMENTS_URL, CATEGORY_SEARCH, PROCEDURE_SEARCH
@@ -108,7 +111,15 @@ def _navigate_form(driver):
 
     # Step 4: Click earliest appointment link
     if click_earliest_appointment_link(driver):
-        time.sleep(3)
+        try:
+            WebDriverWait(driver, 5).until(
+                lambda d: any(
+                    ind in d.find_element(By.TAG_NAME, "body").text.lower()
+                    for ind in NO_APPOINTMENTS_INDICATORS + YES_APPOINTMENTS_INDICATORS
+                )
+            )
+        except TimeoutException:
+            pass
         return True
 
     logger.warning("Could not click on 'cita más temprana' link")
@@ -137,10 +148,15 @@ def check_appointments():
             for attempt in range(1, 4):
                 logger.info(f"Navigating to {APPOINTMENTS_URL} (attempt {attempt}/3)")
                 driver.get(APPOINTMENTS_URL)
-                time.sleep(3)
 
                 click_unidentified_access(driver)
-                time.sleep(2)
+
+                try:
+                    WebDriverWait(driver, 15).until(
+                        EC.visibility_of_element_located((By.ID, CATEGORY_INPUT_ID))
+                    )
+                except TimeoutException:
+                    logger.warning("Form did not load after access click.")
 
                 page_text = get_page_text(driver)
                 if any(err in page_text for err in CONNECTION_ERROR_INDICATORS):
@@ -158,12 +174,8 @@ def check_appointments():
                 logger.warning(message)
                 return None, message, screenshot_path
 
-            # Initial screenshot
-            screenshot_path = save_screenshot(driver)
-
             # Navigate the form
-            if _navigate_form(driver):
-                save_screenshot(driver, "_result")
+            _navigate_form(driver)
 
             # Analyze result
             page_text = get_page_text(driver)
@@ -172,12 +184,14 @@ def check_appointments():
             if has_appointments is True:
                 message = f"APPOINTMENTS AVAILABLE! Detected: '{indicator}'"
                 logger.info(message)
+                screenshot_path = save_screenshot(driver, "_available")
             elif has_appointments is False:
                 message = f"No appointments available. Detected: '{indicator}'"
                 logger.info(message)
             else:
                 message = f"Uncertain status. Check manually: {APPOINTMENTS_URL}"
                 logger.warning(message)
+                screenshot_path = save_screenshot(driver, "_uncertain")
 
             return has_appointments, message, screenshot_path
 
