@@ -2,6 +2,7 @@
 
 import os
 import logging
+from logging.handlers import RotatingFileHandler
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -28,7 +29,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('cita_checker.log'),
+        RotatingFileHandler('cita_checker.log', maxBytes=500_000, backupCount=3),
         logging.StreamHandler()
     ]
 )
