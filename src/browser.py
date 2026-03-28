@@ -17,7 +17,6 @@ from .config import logger, SCREENSHOTS_DIR
 
 
 def _get_chrome_options():
-    """Configura las opciones de Chrome."""
     options = Options()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
@@ -29,16 +28,35 @@ def _get_chrome_options():
         "user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     )
+
+    # En CI, apuntar al binario de Chrome instalado por la action
+    if os.getenv("CI"):
+        import shutil
+        chrome_path = shutil.which("google-chrome") or shutil.which("chromium-browser")
+        if chrome_path:
+            options.binary_location = chrome_path
+
     return options
 
 
 def _get_chromedriver_path():
     """Obtiene el path correcto del chromedriver."""
+    # En CI, usar el chromedriver del sistema
+    if os.getenv("CI"):
+        import shutil
+        path = shutil.which("chromedriver")
+        if path:
+            return path
+
+    # En local, usar webdriver-manager
+    from webdriver_manager.chrome import ChromeDriverManager
     driver_path = ChromeDriverManager().install()
     if driver_path.endswith("THIRD_PARTY_NOTICES.chromedriver"):
         driver_path = driver_path.replace(
             "THIRD_PARTY_NOTICES.chromedriver", "chromedriver"
         )
+    import stat
+    os.chmod(driver_path, os.stat(driver_path).st_mode | stat.S_IEXEC)
     return driver_path
 
 
