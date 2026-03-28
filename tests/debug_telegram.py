@@ -3,6 +3,11 @@
 Debug: Test sending messages via Telegram.
 Run: python tests/test_telegram.py
 """
+import os
+import sys
+
+os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.getcwd())
 
 from src.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from src.notifier import send_notification
@@ -26,7 +31,7 @@ print(f"Token: {TELEGRAM_BOT_TOKEN[:20]}...")
 print(f"Chat ID: {TELEGRAM_CHAT_ID}")
 print("-" * 60)
 
-if send_notification("Bot de citas Madrid - Connection test OK!"):
+if send_notification("Hola! Soy Popo el empadronador y te voy a ayudar a empadronarte!"):
     print("\nMessage sent! Check Telegram.")
 else:
     print("\nERROR sending message.")
