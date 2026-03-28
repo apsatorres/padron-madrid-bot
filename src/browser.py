@@ -578,6 +578,148 @@ def wait_for_procedure_options(driver, select_id, expected_text, timeout=10):
     return False
 
 
+MONTH_MAP = {
+    "ene": "01", "feb": "02", "mar": "03", "abr": "04",
+    "may": "05", "jun": "06", "jul": "07", "ago": "08",
+    "sep": "09", "oct": "10", "nov": "11", "dic": "12",
+}
+
+
+def get_selected_office(driver, timeout=10):
+    """Read the auto-selected office name after clicking 'cita más temprana'."""
+    try:
+        WebDriverWait(driver, timeout).until(
+            lambda d: (
+                d.find_elements(By.ID, "cpTramite_combo2")
+                and d.find_element(By.ID, "cpTramite_combo2").get_attribute("value")
+                and d.find_element(By.ID, "cpTramite_combo2").get_attribute("value")
+                != "-- Seleccione o teclee --"
+            )
+        )
+        return driver.find_element(By.ID, "cpTramite_combo2").get_attribute("value")
+    except TimeoutException:
+        pass
+
+    sel = driver.find_elements(By.ID, "selectOficinas")
+    if sel:
+        try:
+            selected = Select(sel[0]).first_selected_option
+            text = selected.text.strip()
+            if text and text != "Seleccione":
+                return text
+        except Exception:
+            pass
+
+    return None
+
+
+def click_siguiente(driver, timeout=5, wait_for=None):
+    """Click the visible 'Siguiente' button.
+
+    Args:
+        wait_for: Optional CSS selector to wait for after clicking.
+    """
+    clicked = False
+    for btn_id in ["botonTramites", "botonSiguienteHora"]:
+        els = driver.find_elements(By.ID, btn_id)
+        for el in els:
+            if el.is_displayed():
+                el.click()
+                logger.info(f"Clicked Siguiente (#{btn_id})")
+                clicked = True
+                break
+        if clicked:
+            break
+
+    if not clicked:
+        try:
+            btn = WebDriverWait(driver, timeout).until(
+                EC.element_to_be_clickable(
+                    (By.XPATH, "//button[normalize-space(text())='Siguiente']")
+                )
+            )
+            btn.click()
+            logger.info("Clicked Siguiente (text match)")
+            clicked = True
+        except TimeoutException:
+            pass
+
+    if not clicked:
+        logger.warning("Siguiente button not found")
+        return False
+
+    if wait_for:
+        try:
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, wait_for))
+            )
+        except TimeoutException:
+            logger.warning(f"Element '{wait_for}' did not appear after Siguiente")
+
+    return True
+
+
+def get_first_available_date(driver, timeout=10):
+    """Wait for calendar, click the first available date, return DD/MM string."""
+    try:
+        WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "td.disponible"))
+        )
+    except TimeoutException:
+        logger.warning("No available dates in calendar")
+        return None
+
+    headers = driver.find_elements(By.CSS_SELECTOR, "th.datepicker-switch")
+    month_year = ""
+    for h in headers:
+        if h.is_displayed() and h.text.strip():
+            month_year = h.text.strip()
+            break
+
+    month_num = "??"
+    year = "????"
+    if month_year:
+        parts = month_year.split()
+        if len(parts) == 2:
+            month_abbr = parts[0].lower()[:3]
+            month_num = MONTH_MAP.get(month_abbr, "??")
+            year = parts[1]
+
+    cells = driver.find_elements(By.CSS_SELECTOR, "td.disponible")
+    for cell in cells:
+        if cell.is_displayed():
+            day = cell.text.strip()
+            driver.execute_script("arguments[0].scrollIntoView(true);", cell)
+            driver.execute_script("arguments[0].click();", cell)
+            logger.info(f"Clicked available date: {day}/{month_num}/{year}")
+            time.sleep(0.5)
+            return f"{day.zfill(2)}/{month_num}"
+
+    logger.warning("Available date cells found but none clickable")
+    return None
+
+
+def get_first_available_time(driver, timeout=5):
+    """After a date is clicked, read the first available time slot."""
+    try:
+        WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "div.horario button"))
+        )
+    except TimeoutException:
+        logger.warning("No time slots appeared after date click")
+        return None
+
+    buttons = driver.find_elements(By.CSS_SELECTOR, "div.horario button")
+    for btn in buttons:
+        text = btn.text.strip()
+        if text and ":" in text and len(text) <= 5:
+            logger.info(f"First available time: {text}")
+            return text
+
+    logger.warning("Time slot buttons found but no valid time text")
+    return None
+
+
 def get_page_text(driver):
     """Get the page text content."""
     return driver.find_element(By.TAG_NAME, "body").text.lower()

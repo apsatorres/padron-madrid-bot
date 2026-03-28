@@ -13,7 +13,8 @@ from .browser import (
     click_unidentified_access, click_earliest_appointment_link,
     get_page_text, select_combobox_option,
     verify_combobox_selection, wait_for_procedure_options,
-    get_combobox_state
+    get_combobox_state, get_selected_office, click_siguiente,
+    get_first_available_date, get_first_available_time
 )
 
 CATEGORY_INPUT_ID = "cpTramite_combo0"
@@ -36,12 +37,9 @@ NO_APPOINTMENTS_INDICATORS = [
 ]
 
 YES_APPOINTMENTS_INDICATORS = [
-    "citas disponibles",
-    "seleccione una fecha",
-    "horarios disponibles",
-    "elegir cita",
-    "reservar cita",
-    "fechas disponibles"
+    "seleccione una fecha disponible",
+    "seleccione una hora disponible",
+    "elija una de las fechas y horas disponibles",
 ]
 
 CONNECTION_ERROR_INDICATORS = [
@@ -71,9 +69,13 @@ def _analyze_availability(page_text):
 
 def _navigate_form(driver):
     """
-    Navigate the form by selecting category and procedure via combobox inputs.
-    Uses explicit element IDs and verifies each step before proceeding.
-    Returns True if successful.
+    Navigate the form, select category/procedure, click earliest appointment,
+    and if available, extract office/date/time details.
+
+    Returns:
+        dict with keys {office, date, time} if appointment details found,
+        True if form navigated but no detail extraction possible,
+        False if navigation failed.
     """
     # Step 1: Select category
     logger.info(f"Selecting category: '{CATEGORY_SEARCH}'")
@@ -102,29 +104,57 @@ def _navigate_form(driver):
         save_screenshot(driver, "_procedure_fail")
         return False
 
-    # Log final state before attempting link click
-    cat_state = get_combobox_state(driver, CATEGORY_INPUT_ID, CATEGORY_SELECT_ID)
-    proc_state = get_combobox_state(driver, PROCEDURE_INPUT_ID, PROCEDURE_SELECT_ID)
-    logger.info(
-        f"Pre-link state: category={cat_state}, procedure={proc_state}"
-    )
-
     # Step 4: Click earliest appointment link
-    if click_earliest_appointment_link(driver):
-        try:
-            WebDriverWait(driver, 5).until(
-                lambda d: any(
-                    ind in d.find_element(By.TAG_NAME, "body").text.lower()
-                    for ind in NO_APPOINTMENTS_INDICATORS + YES_APPOINTMENTS_INDICATORS
-                )
+    if not click_earliest_appointment_link(driver):
+        logger.warning("Could not click on 'cita más temprana' link")
+        save_screenshot(driver, "_link_fail")
+        return False
+
+    # Wait for page to settle: either no-appointment text or office populated
+    try:
+        WebDriverWait(driver, 10).until(
+            lambda d: (
+                any(ind in d.find_element(By.TAG_NAME, "body").text.lower()
+                    for ind in NO_APPOINTMENTS_INDICATORS)
+                or (d.find_elements(By.ID, "cpTramite_combo2")
+                    and d.find_element(By.ID, "cpTramite_combo2").get_attribute("value")
+                    and d.find_element(By.ID, "cpTramite_combo2").get_attribute("value")
+                    != "-- Seleccione o teclee --")
             )
-        except TimeoutException:
-            pass
+        )
+    except TimeoutException:
+        logger.warning("Page did not settle after 'cita más temprana' click")
+
+    page_text = get_page_text(driver)
+    for ind in NO_APPOINTMENTS_INDICATORS:
+        if ind in page_text:
+            logger.info(f"No appointments after link click: '{ind}'")
+            return True
+
+    # Step 5: Extract appointment details
+    office = get_selected_office(driver)
+    logger.info(f"Office: {office}")
+
+    if not click_siguiente(driver, wait_for=".datepicker"):
+        logger.warning("Could not click Siguiente after office selection")
+        save_screenshot(driver, "_siguiente_fail")
         return True
 
-    logger.warning("Could not click on 'cita más temprana' link")
-    save_screenshot(driver, "_link_fail")
-    return False
+    date_str = get_first_available_date(driver)
+    if not date_str:
+        logger.warning("No available date found in calendar")
+        save_screenshot(driver, "_calendar_fail")
+        return True
+
+    time_str = get_first_available_time(driver)
+    if not time_str:
+        logger.warning("No time slots found after date click")
+        save_screenshot(driver, "_timeslot_fail")
+        return True
+
+    details = {"office": office, "date": date_str, "time": time_str}
+    logger.info(f"Appointment details: {details}")
+    return details
 
 
 def check_appointments():
@@ -174,10 +204,22 @@ def check_appointments():
                 logger.warning(message)
                 return None, message, screenshot_path
 
-            # Navigate the form
-            _navigate_form(driver)
+            # Navigate the form and extract details
+            result = _navigate_form(driver)
 
-            # Analyze result
+            if isinstance(result, dict):
+                office = result.get("office", "?")
+                date = result.get("date", "?")
+                appt_time = result.get("time", "?")
+                message = (
+                    f"Cita mas cercana en {office}, "
+                    f"{date} a las {appt_time}"
+                )
+                logger.info(message)
+                screenshot_path = save_screenshot(driver, "_available")
+                return True, message, screenshot_path
+
+            # No details extracted -- fall back to page text analysis
             page_text = get_page_text(driver)
             has_appointments, indicator = _analyze_availability(page_text)
 
