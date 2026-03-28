@@ -31,7 +31,7 @@ print(f"Token: {TELEGRAM_BOT_TOKEN[:20]}...")
 print(f"Chat ID: {TELEGRAM_CHAT_ID}")
 print("-" * 60)
 
-if send_notification("Hola! Soy Popo el empadronador y te voy a ayudar a empadronarte!"):
+if send_notification("Hola! Soy Popo el empadronador y te voy a ayudar a empadronarte"):
     print("\nMessage sent! Check Telegram.")
 else:
     print("\nERROR sending message.")

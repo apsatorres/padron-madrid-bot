@@ -13,20 +13,22 @@ def _is_configured():
 
 
 async def _send_message_async(message, photo_path=None):
-    """Send message via Telegram (async)."""
+    """Send message via Telegram to all configured chat IDs."""
     bot = telegram.Bot(token=TELEGRAM_BOT_TOKEN)
+    chat_ids = [cid.strip() for cid in TELEGRAM_CHAT_ID.split(",") if cid.strip()]
 
-    await bot.send_message(
-        chat_id=TELEGRAM_CHAT_ID,
-        text=message,
-        parse_mode='HTML'
-    )
-    logger.info("Telegram message sent")
+    for chat_id in chat_ids:
+        await bot.send_message(
+            chat_id=chat_id,
+            text=message,
+            parse_mode='HTML'
+        )
+        logger.info(f"Telegram message sent to {chat_id}")
 
-    if photo_path and os.path.exists(photo_path):
-        with open(photo_path, 'rb') as photo:
-            await bot.send_photo(chat_id=TELEGRAM_CHAT_ID, photo=photo)
-        logger.info("Screenshot sent via Telegram")
+        if photo_path and os.path.exists(photo_path):
+            with open(photo_path, 'rb') as photo:
+                await bot.send_photo(chat_id=chat_id, photo=photo)
+            logger.info(f"Screenshot sent to {chat_id}")
 
 
 def send_notification(message, photo_path=None):
