@@ -578,6 +578,18 @@ def wait_for_procedure_options(driver, select_id, expected_text, timeout=10):
     return False
 
 
+OFFICE_INPUT_ID = "cpTramite_combo2"
+OFFICE_SELECT_ID = "selectOficinas"
+
+
+def select_office(driver, office_name):
+    """Select a specific office from the oficinas combobox."""
+    logger.info(f"Selecting office: '{office_name}'")
+    return select_combobox_option(
+        driver, OFFICE_INPUT_ID, OFFICE_SELECT_ID, office_name
+    )
+
+
 MONTH_MAP = {
     "ene": "01", "feb": "02", "mar": "03", "abr": "04",
     "may": "05", "jun": "06", "jul": "07", "ago": "08",
