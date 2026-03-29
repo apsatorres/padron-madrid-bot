@@ -222,15 +222,16 @@ def check_appointments():
                 logger.warning(message)
                 return None, message, screenshot_path
 
+            # Select category/procedure once
+            if not _select_category_and_procedure(driver):
+                return False, "Failed to select category/procedure", screenshot_path
+
             # Try preferred offices first
             for office_name in PREFERRED_OFFICES:
-                if not _select_category_and_procedure(driver):
-                    return False, "Failed to select category/procedure", screenshot_path
-
                 result = _try_office(driver, office_name)
                 if result:
                     message = (
-                        f"{CATEGORY_SEARCH} / {PROCEDURE_SEARCH}\n"
+                        f"Trámite: {CATEGORY_SEARCH} / {PROCEDURE_SEARCH}\n\n"
                         f"Cita mas cercana en {result['office']}, "
                         f"{result['date']} a las {result['time']}"
                     )
@@ -238,20 +239,29 @@ def check_appointments():
                     screenshot_path = save_screenshot(driver, "_available")
                     return True, message, screenshot_path
 
-                # Reload page for next attempt
-                logger.info(f"No appointments at '{office_name}', trying next...")
-                if not _load_page_and_access(driver):
-                    break
+                # Go back to office selection (category/procedure still selected)
+                logger.info(f"No appointments at '{office_name}', going back...")
+                driver.back()
+                try:
+                    WebDriverWait(driver, 5).until(
+                        EC.visibility_of_element_located(
+                            (By.ID, "cpTramite_combo2")
+                        )
+                    )
+                except TimeoutException:
+                    logger.warning("Back navigation failed, reloading page...")
+                    if not _load_page_and_access(driver):
+                        break
+                    if not _select_category_and_procedure(driver):
+                        break
 
             # Fallback: cita más temprana
             logger.info("No preferred offices available, trying 'cita más temprana'...")
-            if not _select_category_and_procedure(driver):
-                return False, "Failed to select category/procedure", screenshot_path
 
             result = _try_earliest_appointment(driver)
             if result:
                 message = (
-                    f"{CATEGORY_SEARCH} / {PROCEDURE_SEARCH}\n"
+                    f"Trámite: {CATEGORY_SEARCH} / {PROCEDURE_SEARCH}\n\n"
                     f"Cita mas cercana en {result['office']}, "
                     f"{result['date']} a las {result['time']}\n"
                     f"(ninguna oficina preferida disponible)"

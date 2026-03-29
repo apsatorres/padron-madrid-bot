@@ -662,7 +662,7 @@ def click_siguiente(driver, timeout=5, wait_for=None):
 
     if wait_for:
         try:
-            WebDriverWait(driver, 10).until(
+            WebDriverWait(driver, 5).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, wait_for))
             )
         except TimeoutException:
@@ -671,7 +671,7 @@ def click_siguiente(driver, timeout=5, wait_for=None):
     return True
 
 
-def get_first_available_date(driver, timeout=10):
+def get_first_available_date(driver, timeout=5):
     """Wait for calendar, click the first available date, return DD/MM string."""
     try:
         WebDriverWait(driver, timeout).until(
