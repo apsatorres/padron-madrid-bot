@@ -4,7 +4,7 @@
 import sys
 import html
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 import schedule
 
@@ -15,7 +15,8 @@ from .notifier import send_notification
 
 def _format_appointment_message(has_appointments, message):
     """Format the message for Telegram."""
-    timestamp = datetime.now().strftime("%d/%m/%Y %H:%M")
+    madrid_tz = timezone(timedelta(hours=2))
+    timestamp = datetime.now(madrid_tz).strftime("%d/%m/%Y %H:%M")
     safe_message = html.escape(message or "")
 
     if has_appointments is True:
