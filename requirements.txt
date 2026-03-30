@@ -1,5 +1,4 @@
 selenium==4.18.1
 webdriver-manager==4.0.1
-python-telegram-bot==21.0.1
+python-telegram-bot[job-queue]==21.0.1
 python-dotenv==1.0.1
-schedule==1.2.1

@@ -582,6 +582,55 @@ OFFICE_INPUT_ID = "cpTramite_combo2"
 OFFICE_SELECT_ID = "selectOficinas"
 
 
+def fetch_site_options(category=None):
+    """Fetch available options from the live site.
+
+    If category is None, returns {"categories": [...]}.
+    If category is given, selects it and returns:
+      {"procedures": [...], "offices": [...]}.
+    """
+    from .config import APPOINTMENTS_URL
+
+    result = {}
+    try:
+        with create_driver() as driver:
+            driver.get(APPOINTMENTS_URL)
+            click_unidentified_access(driver)
+            WebDriverWait(driver, 15).until(
+                EC.visibility_of_element_located((By.ID, "cpTramite_combo0"))
+            )
+
+            cat_sel = driver.find_element(By.ID, "selectCategorias")
+            cats = [
+                _get_option_text(o) for o in Select(cat_sel).options
+                if _get_option_text(o) and _get_option_text(o) != "-- Seleccione o teclee --"
+            ]
+            result["categories"] = cats
+
+            if category:
+                select_combobox_option(driver, "cpTramite_combo0", "selectCategorias", category)
+                time.sleep(1)
+
+                proc_sel = driver.find_element(By.ID, "selectTramites")
+                procs = [
+                    _get_option_text(o) for o in Select(proc_sel).options
+                    if _get_option_text(o) and _get_option_text(o) != "-- Seleccione o teclee --"
+                ]
+                result["procedures"] = procs
+
+                office_sel = driver.find_element(By.ID, "selectOficinas")
+                offices = [
+                    _get_option_text(o) for o in Select(office_sel).options
+                    if _get_option_text(o) and _get_option_text(o) != "-- Seleccione o teclee --"
+                ]
+                result["offices"] = offices
+
+    except Exception as e:
+        logger.warning(f"Error fetching site options: {e}")
+
+    return result
+
+
 def select_office(driver, office_name):
     """Select a specific office from the oficinas combobox."""
     logger.info(f"Selecting office: '{office_name}'")

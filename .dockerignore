@@ -1,0 +1,8 @@
+.git
+.env
+screenshots/
+*.log
+__pycache__
+*.pyc
+.sfdx/
+user_checks.db

@@ -5,10 +5,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 
-from .config import (
-    logger, APPOINTMENTS_URL, CATEGORY_SEARCH, PROCEDURE_SEARCH,
-    PREFERRED_OFFICES
-)
+from .config import logger, APPOINTMENTS_URL
 from .browser import (
     create_driver, save_screenshot,
     click_unidentified_access, click_earliest_appointment_link,
@@ -65,7 +62,7 @@ def _analyze_availability(page_text):
 
 
 def _load_page_and_access(driver):
-    """Navigate to the site and click through the access gate. Returns True on success."""
+    """Navigate to the site and click through the access gate."""
     for attempt in range(1, 4):
         logger.info(f"Navigating to {APPOINTMENTS_URL} (attempt {attempt}/3)")
         driver.get(APPOINTMENTS_URL)
@@ -89,29 +86,29 @@ def _load_page_and_access(driver):
     return False
 
 
-def _select_category_and_procedure(driver):
-    """Select category and procedure in the form. Returns True on success."""
-    logger.info(f"Selecting category: '{CATEGORY_SEARCH}'")
+def _select_category_and_procedure(driver, category, procedure):
+    """Select category and procedure in the form."""
+    logger.info(f"Selecting category: '{category}'")
     if not select_combobox_option(
-        driver, CATEGORY_INPUT_ID, CATEGORY_SELECT_ID, CATEGORY_SEARCH
+        driver, CATEGORY_INPUT_ID, CATEGORY_SELECT_ID, category
     ):
-        logger.warning(f"Failed to select category '{CATEGORY_SEARCH}'")
+        logger.warning(f"Failed to select category '{category}'")
         save_screenshot(driver, "_category_fail")
         return False
 
     logger.info("Waiting for procedure options to load...")
     if not wait_for_procedure_options(
-        driver, PROCEDURE_SELECT_ID, PROCEDURE_SEARCH, timeout=10
+        driver, PROCEDURE_SELECT_ID, procedure, timeout=10
     ):
         logger.warning("Procedure options did not load after category selection")
         save_screenshot(driver, "_procedure_wait_fail")
         return False
 
-    logger.info(f"Selecting procedure: '{PROCEDURE_SEARCH}'")
+    logger.info(f"Selecting procedure: '{procedure}'")
     if not select_combobox_option(
-        driver, PROCEDURE_INPUT_ID, PROCEDURE_SELECT_ID, PROCEDURE_SEARCH
+        driver, PROCEDURE_INPUT_ID, PROCEDURE_SELECT_ID, procedure
     ):
-        logger.warning(f"Failed to select procedure '{PROCEDURE_SEARCH}'")
+        logger.warning(f"Failed to select procedure '{procedure}'")
         save_screenshot(driver, "_procedure_fail")
         return False
 
@@ -132,10 +129,7 @@ def _extract_date_and_time(driver):
 
 
 def _try_office(driver, office_name):
-    """Select a specific office, click Siguiente, extract date/time.
-
-    Returns dict {office, date, time} or None.
-    """
+    """Select a specific office, click Siguiente, extract date/time."""
     if not select_office(driver, office_name):
         logger.info(f"Could not select office '{office_name}'")
         return None
@@ -155,10 +149,7 @@ def _try_office(driver, office_name):
 
 
 def _try_earliest_appointment(driver):
-    """Click 'cita más temprana' and extract appointment details.
-
-    Returns dict {office, date, time} or None.
-    """
+    """Click 'cita más temprana' and extract appointment details."""
     if not click_earliest_appointment_link(driver):
         logger.warning("Could not click on 'cita más temprana' link")
         save_screenshot(driver, "_link_fail")
@@ -199,19 +190,23 @@ def _try_earliest_appointment(driver):
     return None
 
 
-def check_appointments():
+def check_appointments(category, procedure, preferred_offices=None):
     """
-    Check appointment availability.
+    Check appointment availability for a specific category/procedure.
 
-    Tries preferred offices first, then falls back to 'cita más temprana'.
+    Args:
+        category: Category name (e.g. "Padrón y censo")
+        procedure: Procedure name (e.g. "Altas, bajas y cambio de domicilio en Padrón")
+        preferred_offices: Optional list of office names to try first
 
     Returns:
         tuple: (has_appointments: bool|None, message: str, screenshot_path: str|None)
     """
+    preferred = preferred_offices or []
     screenshot_path = None
 
     try:
-        logger.info("Starting appointment check...")
+        logger.info(f"Checking: {category} / {procedure}")
 
         with create_driver() as driver:
             if not _load_page_and_access(driver):
@@ -222,16 +217,15 @@ def check_appointments():
                 logger.warning(message)
                 return None, message, screenshot_path
 
-            # Select category/procedure once
-            if not _select_category_and_procedure(driver):
+            if not _select_category_and_procedure(driver, category, procedure):
                 return False, "Failed to select category/procedure", screenshot_path
 
             # Try preferred offices first
-            for office_name in PREFERRED_OFFICES:
+            for office_name in preferred:
                 result = _try_office(driver, office_name)
                 if result:
                     message = (
-                        f"Trámite: {CATEGORY_SEARCH} / {PROCEDURE_SEARCH}\n\n"
+                        f"Trámite: {category} / {procedure}\n\n"
                         f"Cita mas cercana en {result['office']}, "
                         f"{result['date']} a las {result['time']}"
                     )
@@ -239,7 +233,6 @@ def check_appointments():
                     screenshot_path = save_screenshot(driver, "_available")
                     return True, message, screenshot_path
 
-                # Go back to office selection (category/procedure still selected)
                 logger.info(f"No appointments at '{office_name}', going back...")
                 driver.back()
                 try:
@@ -252,19 +245,22 @@ def check_appointments():
                     logger.warning("Back navigation failed, reloading page...")
                     if not _load_page_and_access(driver):
                         break
-                    if not _select_category_and_procedure(driver):
+                    if not _select_category_and_procedure(driver, category, procedure):
                         break
 
             # Fallback: cita más temprana
-            logger.info("No preferred offices available, trying 'cita más temprana'...")
+            logger.info("Trying 'cita más temprana' fallback...")
 
             result = _try_earliest_appointment(driver)
             if result:
+                fallback_note = ""
+                if preferred:
+                    fallback_note = "\n(ninguna oficina preferida disponible)"
                 message = (
-                    f"Trámite: {CATEGORY_SEARCH} / {PROCEDURE_SEARCH}\n\n"
+                    f"Trámite: {category} / {procedure}\n\n"
                     f"Cita mas cercana en {result['office']}, "
-                    f"{result['date']} a las {result['time']}\n"
-                    f"(ninguna oficina preferida disponible)"
+                    f"{result['date']} a las {result['time']}"
+                    f"{fallback_note}"
                 )
                 logger.info(message)
                 screenshot_path = save_screenshot(driver, "_available")
