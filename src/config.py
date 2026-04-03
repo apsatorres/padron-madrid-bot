@@ -19,7 +19,6 @@ PREFERRED_OFFICES = [
     "OAC Ciudad Lineal",
     "OAC Chamberí",
     "OAC Centro",
-    "OAC Retiro",
     "OAC Salamanca"
 ]
 
