@@ -275,14 +275,14 @@ def check_appointments():
             has_appointments, indicator = _analyze_availability(page_text)
 
             if has_appointments is True:
-                message = f"APPOINTMENTS AVAILABLE! Detected: '{indicator}'"
+                message = f"CITA DISPONIBLE! Detectado: '{indicator}'"
                 logger.info(message)
                 screenshot_path = save_screenshot(driver, "_available")
             elif has_appointments is False:
-                message = f"No appointments available. Detected: '{indicator}'"
+                message = f"No hay citas disponibles. Detectado: '{indicator}'"
                 logger.info(message)
             else:
-                message = f"Uncertain status. Check manually: {APPOINTMENTS_URL}"
+                message = f"Estado incierto. Chequear manualmente: {APPOINTMENTS_URL}"
                 logger.warning(message)
                 screenshot_path = save_screenshot(driver, "_uncertain")
 
